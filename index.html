@@ -10,7 +10,7 @@
 <meta property="og:site_name" content="Thooimai Mission">
 <meta property="og:title" content="Bin Me If You Can · Thooimai Mission Diwali Special">
 <meta property="og:description" content="Sort 40 Diwali waste items into the right bins and light every diya. Think you can complete it?">
-<meta property="og:url" content="https://digitalplayground3.github.io/thooimai-diwali/">
+<meta property="og:url" content="https://digitalplayground3.github.io/bin_me_if_u_can/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Bin Me If You Can · Thooimai Mission Diwali Special">
 <meta name="twitter:description" content="Sort 40 Diwali waste items into the right bins and light every diya. Think you can complete it?">
@@ -231,6 +231,24 @@ body{
 @keyframes titlein{from{opacity:0;transform:translateY(-10px) scale(.94)}to{opacity:1;transform:none}}
 @media (max-height:560px){.gametitle{padding-top:4px}.gametitle .bmyc{--h:46px}.tmcorner{width:70px;top:6px}.title--logo .bmyc{--w:min(168px,30vw)}}
 @media (prefers-reduced-motion:reduce){.gametitle{animation:none;opacity:1}}
+
+/* ============================================================
+   OWNER VIEW: only built when the game is opened with the owner link
+   ============================================================ */
+.ownerbtn{position:fixed;left:10px;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:9999;appearance:none;border:2px solid #FFC24A;background:#26184E;color:#FFF4E0;border-radius:999px;padding:8px 14px;font:700 14px/1 var(--font);cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.4)}
+.ownerbox{position:fixed;left:10px;top:calc(10px + env(safe-area-inset-top,0px));z-index:9999;width:min(360px,calc(100vw - 20px));background:#26184E;color:#FFF4E0;border:2px solid #FFC24A;border-radius:18px;padding:12px;box-shadow:0 14px 34px rgba(0,0,0,.55);-webkit-user-select:text;user-select:text}
+.ownerbox[hidden]{display:none}
+.ownerhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.ownerhead b{font-size:16px}.ownerhead span{font-size:11px;color:#CDBFE6}
+.ownerrows{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ownerrow{background:#1B0F3F;border:1.5px solid #43307A;border-radius:12px;padding:7px 10px 6px}
+.ownerrow .lbl{font-weight:700;font-size:12px;color:#CDBFE6;line-height:1.1}
+.ownerrow .num{font-weight:900;font-size:26px;line-height:1.15;color:#FFC24A}
+.ownerrow .sub{font-size:11px;font-weight:700;color:#CDBFE6;line-height:1.2}
+.ownernote{font-size:11px;color:#CDBFE6;line-height:1.35;margin:8px 0}
+.ownernote.warn{color:#FF8A80}
+.owneractions{display:flex;gap:8px}
+.owneractions button{appearance:none;border:0;border-radius:999px;padding:8px 16px;font:800 13px/1 var(--font);cursor:pointer;background:#FFF4E0;color:#170D3A}
 </style>
 </head>
 <body>
@@ -711,6 +729,7 @@ function finish() {
   $("fFirst").textContent = S.firstTry + " / 40";
   const end = $("endScreen"); end.classList.remove("end"); void end.offsetWidth; end.classList.add("end");
   show("endScreen", true);
+  track("complete");
   $("againBtn").focus({ preventScroll: true });
 }
 
@@ -718,7 +737,99 @@ function finish() {
    12. RESTART LOGIC + INIT
    ============================================================ */
 $("startBtn").addEventListener("click", start);
+/* ============================================================
+   COUNTING (your own Google Sheet). Sends only the NAME of what happened, no personal data.
+   visit = game page opened | new-user = first time on a device | play = every START / PLAY AGAIN
+   complete = finished all 40 | share = tapped SHARE THE JOY
+   ============================================================ */
+const COUNT_URL = "https://script.google.com/macros/s/AKfycbyZYr46a_DhQhcDgSMbMp_12btkoC-Gok6KWqU88XCW2TjpgXP2NUI5duno0QHaQ0sk/exec";   // <-- paste your Google Sheet "Web app" address here (it ends with /exec). Empty = counting is off.
+const ADMIN_PARAM = new URLSearchParams(location.search).get("admin");
+const ADMIN_ON = ADMIN_PARAM !== null;            // any ?admin=... visit is never counted
+function track(eventName) {
+  if (ADMIN_ON || !COUNT_URL) return;
+  try {
+    fetch(COUNT_URL, { method: "POST", mode: "no-cors", keepalive: true, headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ event: eventName }) }).catch(function () { /* counting must never break the game */ });
+  } catch (e) { /* counting must never break the game */ }
+}
+track("visit");                                                          // game page opened
+if (!ADMIN_ON) try { if (!localStorage.getItem("bmyc_seen")) { localStorage.setItem("bmyc_seen", "1"); track("new-user"); } } catch (e) { /* private mode: skip */ }
+$("startBtn").addEventListener("click", () => track("play"));            // every game started
+$("againBtn").addEventListener("click", () => track("play"));
 $("againBtn").addEventListener("click", start);
+
+/* ============================================================
+   OWNER VIEW (hidden): open the game with  ?admin=YOUR-SECRET-WORD  to see the numbers.
+   Your Google Sheet checks the word. The word is NOT stored in this file.
+   ============================================================ */
+function buildOwnerPanel() {
+  const ROWS = [
+    { label: "Visits",        ev: "visit",    hint: "game page opened" },
+    { label: "New users",     ev: "new-user", hint: "first time on a phone or computer" },
+    { label: "Games played",  ev: "play",     hint: "every START and PLAY AGAIN" },
+    { label: "Completed",     ev: "complete", hint: "finished all 40 items" },
+    { label: "Shares",        ev: "share",    hint: "SHARE THE JOY taps" }
+  ];
+  const fmt = (n) => Number(n).toLocaleString("en-IN");
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "ownerbtn"; btn.textContent = "📊 Owner"; btn.hidden = true;
+  const box = document.createElement("div");
+  box.className = "ownerbox"; box.hidden = true; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Owner view");
+  box.innerHTML = '<div class="ownerhead"><b>📊 Owner view</b><span>only you see this</span></div><div class="ownerrows"></div><div class="ownernote"></div><div class="owneractions"><button type="button" data-act="refresh">Refresh</button><button type="button" data-act="close">Close</button></div>';
+  document.body.appendChild(box); document.body.appendChild(btn);
+  const rowsEl = box.querySelector(".ownerrows"), noteEl = box.querySelector(".ownernote");
+  const tiles = ROWS.map((r) => {
+    const row = document.createElement("div"); row.className = "ownerrow"; row.title = r.hint;
+    const l = document.createElement("div"); l.className = "lbl"; l.textContent = r.label;
+    const num = document.createElement("div"); num.className = "num"; num.textContent = "…";
+    const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = " ";
+    row.appendChild(l); row.appendChild(num); row.appendChild(sub); rowsEl.appendChild(row);
+    return { num: num, sub: sub, ev: r.ev };
+  });
+  const extra = document.createElement("div"); extra.className = "ownerrow"; extra.title = "completed ÷ played";
+  extra.innerHTML = '<div class="lbl">Completion rate</div><div class="num">…</div><div class="sub"> </div>';
+  rowsEl.appendChild(extra);
+  const extraNum = extra.querySelector(".num");
+
+  async function load() {
+    if (!COUNT_URL) return { error: "setup" };
+    try {
+      const r = await fetch(COUNT_URL + "?action=stats&key=" + encodeURIComponent(ADMIN_PARAM), { cache: "no-store" });
+      const j = await r.json();
+      return (j && j.ok) ? j : { error: "denied" };
+    } catch (e) { return { error: "network" }; }
+  }
+  async function refresh() {
+    tiles.forEach((t) => { t.num.textContent = "…"; t.sub.textContent = " "; }); extraNum.textContent = "…";
+    noteEl.className = "ownernote"; noteEl.textContent = "Loading…";
+    const j = await load();
+    if (j.error === "denied") { box.remove(); btn.remove(); return; }            // wrong word: show nothing at all
+    btn.hidden = false;
+    if (j.error === "setup") {
+      tiles.forEach((t) => { t.num.textContent = "–"; }); extraNum.textContent = "–";
+      noteEl.className = "ownernote warn"; noteEl.textContent = "Counting is not set up yet. Paste your Google Sheet web app address into COUNT_URL in the game file.";
+      return;
+    }
+    if (j.error === "network") {
+      tiles.forEach((t) => { t.num.textContent = "?"; }); extraNum.textContent = "?";
+      noteEl.className = "ownernote warn"; noteEl.textContent = "Could not reach your Google Sheet counter. Check the internet and press Refresh.";
+      return;
+    }
+    tiles.forEach((t) => { t.num.textContent = fmt(j.total[t.ev] || 0); t.sub.textContent = "today " + fmt((j.today && j.today[t.ev]) || 0); });
+    const played = j.total.play || 0, done = j.total.complete || 0;
+    extraNum.textContent = played ? Math.min(100, Math.round(done / played * 100)) + "%" : "–";
+    noteEl.className = "ownernote";
+    noteEl.textContent = "Live numbers, updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + ". Your own plays on this link are not counted.";
+  }
+  btn.addEventListener("click", () => { box.hidden = !box.hidden; });
+  $("startBtn").addEventListener("click", () => { box.hidden = true; });     // get out of the way when you start playing
+  box.addEventListener("click", (e) => {
+    const act = e.target && e.target.getAttribute && e.target.getAttribute("data-act");
+    if (act === "refresh") refresh(); else if (act === "close") box.hidden = true;
+  });
+  box.hidden = true;
+  refresh().then(() => { if (!btn.hidden && document.body.contains(box)) box.hidden = false; });
+}
+if (ADMIN_ON && ADMIN_PARAM) buildOwnerPanel();
 
 /* ============================================================
    13. SHARE THE JOY (final screen)
@@ -728,7 +839,7 @@ $("againBtn").addEventListener("click", start);
 /* Address used when the game is NOT running on a normal web page (for example inside a preview window,
    where the browser reports "about:srcdoc", or when opened as a file). On the real hosted page the
    address is detected automatically and this line is never used. Change it if your game lives elsewhere. */
-const FALLBACK_GAME_URL = "https://digitalplayground3.github.io/thooimai-diwali/";
+const FALLBACK_GAME_URL = "https://digitalplayground3.github.io/bin_me_if_u_can/";
 function gameUrl() {
   const u = location.href;
   if (!/^https?:\/\//i.test(u)) return FALLBACK_GAME_URL;           // about:srcdoc, file:, blob:, data: ...
@@ -758,6 +869,7 @@ async function copyText(t) {
   } catch (e) { return false; }
 }
 async function shareJoy() {
+  track("share");
   const text = shareMessage();
   const data = { title: "Bin Me If You Can · Thooimai Mission", text };
   if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
